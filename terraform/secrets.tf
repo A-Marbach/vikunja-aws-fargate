@@ -25,3 +25,12 @@ resource "aws_secretsmanager_secret_version" "vikunja_service_secret" {
   secret_id     = aws_secretsmanager_secret.vikunja_service_secret.id
   secret_string = var.vikunja_service_secret
 }
+
+resource "aws_secretsmanager_secret" "s3_secret_key" {
+  name = "${var.project_name}/s3-secret-key"
+}
+
+resource "aws_secretsmanager_secret_version" "s3_secret_key" {
+  secret_id     = aws_secretsmanager_secret.s3_secret_key.id
+  secret_string = aws_iam_access_key.vikunja_s3.secret
+}

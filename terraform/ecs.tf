@@ -16,12 +16,12 @@ resource "aws_ecs_task_definition" "vikunja" {
   memory = "512"
 
   execution_role_arn = aws_iam_role.ecs_task_execution.arn
+  task_role_arn      = aws_iam_role.ecs_task.arn
 
   container_definitions = jsonencode([
     {
-      name  = "vikunja"
-      image = "vikunja/vikunja:latest"
-
+      name      = "vikunja"
+      image     = "vikunja/vikunja:latest"
       essential = true
 
       portMappings = [
@@ -50,9 +50,35 @@ resource "aws_ecs_task_definition" "vikunja" {
           value = "vikunja"
         },
         {
+          name  = "VIKUNJA_DATABASE_SSLMODE"
+          value = "require"
+        },
+        {
           name  = "VIKUNJA_SERVICE_PUBLICURL"
           value = "http://${aws_lb.main.dns_name}/"
-        }
+        },
+        {
+          name  = "VIKUNJA_FILES_TYPE"
+          value = "s3"
+        },
+        {
+          name  = "VIKUNJA_FILES_S3_ENDPOINT"
+          value = "https://s3.${var.aws_region}.amazonaws.com"
+        },
+        {
+          name  = "VIKUNJA_FILES_S3_BUCKET"
+          value = aws_s3_bucket.vikunja_files.bucket
+        },
+        {
+          name  = "VIKUNJA_FILES_S3_REGION"
+          value = var.aws_region
+        },
+        {
+          name  = "VIKUNJA_FILES_S3_ACCESSKEY"
+          value = aws_iam_access_key.vikunja_s3.id
+        },
+
+
       ]
 
       secrets = [
@@ -63,6 +89,11 @@ resource "aws_ecs_task_definition" "vikunja" {
         {
           name      = "VIKUNJA_SERVICE_SECRET"
           valueFrom = aws_secretsmanager_secret.vikunja_service_secret.arn
+        },
+
+        {
+          name      = "VIKUNJA_FILES_S3_SECRETKEY"
+          valueFrom = aws_secretsmanager_secret.s3_secret_key.arn
         }
       ]
 
