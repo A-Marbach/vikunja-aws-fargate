@@ -34,7 +34,7 @@ resource "aws_db_instance" "main" {
   backup_retention_period = 7
 
   deletion_protection = false
-  skip_final_snapshot  = true
+  skip_final_snapshot = true
 
   multi_az = false
 

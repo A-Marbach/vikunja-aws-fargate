@@ -27,3 +27,10 @@ variable "db_password" {
   type        = string
   sensitive   = true
 }
+
+
+variable "vikunja_service_secret" {
+  description = "Vikunja service secret"
+  type        = string
+  sensitive   = true
+}
