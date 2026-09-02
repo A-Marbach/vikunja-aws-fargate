@@ -1,519 +1,196 @@
 # Vikunja on AWS ECS Fargate
 
-Terraform-based AWS infrastructure for running Vikunja on ECS Fargate with PostgreSQL, load balancing, private networking, secrets management, monitoring, and backup support.
+AWS infrastructure project for running Vikunja on ECS Fargate with Terraform.
+
+The project focuses on cloud infrastructure, container operations, networking, security, monitoring, persistence, backup and recovery, and Infrastructure as Code.
 
 ## Architecture
 
 ```mermaid
 flowchart TD
     Internet --> ALB[Application Load Balancer]
-    ALB --> ECS[ECS Fargate Service]
+    ALB --> ECS[ECS Fargate]
     ECS --> RDS[(RDS PostgreSQL)]
-    ECS --> CW[CloudWatch Logs]
+    ECS --> S3[(Amazon S3)]
+    ECS --> CW[CloudWatch]
     ECS --> SM[Secrets Manager]
-    NAT[NAT Gateway] --> Internet
-    ECS --> NAT
+    CW --> SNS[SNS Email Alerts]
 
     subgraph AWS VPC
         ALB
-
-        subgraph Public Subnets
-            NAT
-        end
-
-        subgraph Private Subnets
-            ECS
-            RDS
-        end
+        ECS
+        RDS
     end
 ```
 
-## Overview
-
-This project deploys the open-source task management application Vikunja on AWS using ECS Fargate.
-
-The infrastructure is fully defined with Terraform and separates public and private workloads.
-
-The Application Load Balancer is publicly reachable, while the ECS tasks and PostgreSQL database run inside private subnets.
-
-The project also includes:
+## Tech Stack
 
 - AWS ECS Fargate
 - Application Load Balancer
 - Amazon RDS PostgreSQL
-- AWS Secrets Manager
-- CloudWatch Logs
-- IAM roles and policies
-- Public and private networking
+- Amazon S3
+- AWS VPC
+- Public and private subnets
 - NAT Gateway
 - Security Groups
-- Automated RDS backups
-- Infrastructure as Code with Terraform
+- IAM
+- AWS Secrets Manager
+- CloudWatch Logs & Alarms
+- Amazon SNS
+- AWS Budgets
+- Terraform
+- GitHub Actions
 
-## Architecture Flow
+## Infrastructure
 
-```text
-Internet
-   |
-   v
-Application Load Balancer
-Port 80
-   |
-   v
-ECS Fargate Service
-Vikunja
-Port 3456
-   |
-   v
-Amazon RDS PostgreSQL
-Port 5432
-```
+The Application Load Balancer is the public entry point.
 
-The ECS tasks and database are not directly accessible from the internet.
-
-## Networking
-
-The infrastructure uses a dedicated VPC:
-
-```text
-10.10.0.0/16
-```
-
-The VPC contains two public and two private subnets across multiple Availability Zones.
-
-```text
-VPC: 10.10.0.0/16
-
-Public Subnet A:
-10.10.1.0/24
-
-Public Subnet B:
-10.10.2.0/24
-
-Private Subnet A:
-10.10.11.0/24
-
-Private Subnet B:
-10.10.12.0/24
-```
-
-The public subnets contain the Application Load Balancer and NAT Gateway.
-
-The private subnets contain the ECS Fargate workloads and Amazon RDS database.
-
-## Public Networking
-
-The public subnets use an Internet Gateway.
+ECS Fargate tasks and PostgreSQL run in private subnets.
 
 ```text
 Internet
    |
    v
-Internet Gateway
+Application Load Balancer :80
    |
    v
-Public Route Table
+ECS Fargate :3456
    |
-   +--> Public Subnet A
+   +--> RDS PostgreSQL :5432
    |
-   +--> Public Subnet B
+   +--> Amazon S3
 ```
 
-The public route table contains:
-
-```text
-0.0.0.0/0 -> Internet Gateway
-```
-
-## Private Networking
-
-The ECS tasks require outbound internet access to retrieve container images and communicate with AWS services.
-
-A NAT Gateway provides outbound connectivity without exposing the ECS tasks directly to the internet.
-
-```text
-Private Subnets
-      |
-      v
-Private Route Table
-      |
-      v
-NAT Gateway
-      |
-      v
-Internet Gateway
-      |
-      v
-Internet
-```
-
-The ECS tasks do not receive public IP addresses.
-
-## Application Load Balancer
-
-The Application Load Balancer is the public entry point for the application.
-
-It listens on:
-
-```text
-HTTP Port 80
-```
-
-Requests are forwarded to the ECS Fargate tasks on:
-
-```text
-Port 3456
-```
-
-Traffic flow:
-
-```text
-Browser
-   |
-   v
-ALB :80
-   |
-   v
-Target Group
-   |
-   v
-Vikunja :3456
-```
-
-The ALB uses two public subnets across different Availability Zones.
-
-## ECS Fargate
-
-Vikunja runs as a container using AWS ECS Fargate.
-
-Fargate allows containers to run without managing EC2 instances.
-
-The ECS cluster contains an ECS service which maintains the required number of running tasks.
-
-```text
-ECS Cluster
-   |
-   v
-ECS Service
-   |
-   v
-Fargate Task
-   |
-   v
-Vikunja Container
-```
-
-The service currently uses:
-
-```text
-desired_count = 1
-```
-
-If the running task fails or is manually stopped, ECS automatically starts a replacement task.
-
-## ECS Task Definition
-
-The ECS Task Definition defines how the Vikunja container runs.
-
-It includes:
-
-- Container image
-- CPU
-- Memory
-- Container port
-- Environment variables
-- Secrets
-- CloudWatch logging
-
-Current task resources:
-
-```text
-CPU: 256
-Memory: 512 MB
-Container Port: 3456
-```
-
-The Vikunja container image is currently:
-
-```text
-vikunja/vikunja:latest
-```
-
-For a final production-style version, the image should be pinned to a specific version instead of using `latest`.
-
-## Database
-
-The application uses Amazon RDS PostgreSQL for persistent storage.
-
-The RDS database is located inside the private subnets.
-
-The database is configured with:
-
-```text
-Engine: PostgreSQL
-Instance class: db.t4g.micro
-Storage: 20 GB gp3
-Maximum storage: 50 GB
-Public access: disabled
-Multi-AZ: disabled
-```
-
-The database is not directly accessible from the internet.
-
-Only the ECS Security Group can connect to PostgreSQL.
+ECS uses a NAT Gateway for outbound internet access without exposing the tasks directly to the internet.
 
 ## Persistence
 
-Application data is stored in Amazon RDS rather than inside the ECS container.
+Persistent data is stored outside the ECS container:
 
-This means ECS tasks can be replaced without losing application data.
+- Application data -> Amazon RDS PostgreSQL
+- File attachments -> Amazon S3
 
-Example:
+This allows ECS tasks to be replaced without losing application data or uploaded files.
 
-```text
-Old ECS Task
-   |
-   X
-Task stopped
+## Security
 
-ECS Service
-   |
-   v
-New ECS Task
-   |
-   v
-Same RDS database
-   |
-   v
-Existing application data
-```
+- ECS and RDS are not publicly accessible
+- ALB-to-ECS traffic is restricted by Security Groups
+- PostgreSQL access is restricted to the ECS Security Group
+- S3 public access is blocked
+- Secrets are stored in AWS Secrets Manager
+- IAM permissions are limited to required resources
 
-## Security Groups
+## ECS Fargate
 
-The infrastructure uses separate Security Groups for each layer.
+Vikunja runs as an ECS Fargate service.
 
-### ALB Security Group
-
-Allows:
+Task resources:
 
 ```text
-Internet -> ALB :80
+CPU:    256
+Memory: 512 MB
+Port:   3456
 ```
 
-### ECS Security Group
+The container image is pinned to a SHA256 digest instead of using `latest` to keep deployments reproducible.
 
-Allows:
+The ECS service automatically replaces failed or manually stopped tasks.
 
-```text
-ALB -> ECS :3456
-```
+## Monitoring & Alerting
 
-The ECS application port is not open directly to the internet.
+CloudWatch Logs collect application logs.
 
-### RDS Security Group
+CloudWatch alarms monitor:
 
-Allows:
-
-```text
-ECS -> RDS :5432
-```
-
-PostgreSQL is only reachable from the ECS Security Group.
-
-## Security Flow
-
-```text
-Internet
-   |
-   | HTTP :80
-   v
-ALB Security Group
-   |
-   | TCP :3456
-   v
-ECS Security Group
-   |
-   | PostgreSQL :5432
-   v
-RDS Security Group
-```
-
-Allowed:
-
-```text
-Internet -> ALB
-ALB -> ECS
-ECS -> RDS
-```
-
-Blocked:
-
-```text
-Internet -> ECS
-Internet -> RDS
-```
-
-## Secrets Management
-
-Sensitive values are stored in AWS Secrets Manager.
-
-The project currently stores:
-
-```text
-VIKUNJA_DATABASE_PASSWORD
-VIKUNJA_SERVICE_SECRET
-```
-
-These values are injected into the ECS container at runtime.
-
-The credentials are not hard-coded inside the Terraform configuration.
-
-The ECS execution role has permission to retrieve only the required secrets.
-
-## IAM
-
-The ECS tasks use an IAM execution role.
-
-The role allows ECS to perform required operations such as:
-
-- Retrieve container images
-- Send application logs to CloudWatch
-- Retrieve application secrets from AWS Secrets Manager
-
-A dedicated policy provides permission to access only the required Secrets Manager resources.
-
-## CloudWatch Logging
-
-Vikunja container logs are sent to Amazon CloudWatch Logs.
-
-The Terraform configuration creates the log group:
-
-```text
-/ecs/vikunja-fargate
-```
-
-Log retention is configured to automatically remove old logs after the defined retention period.
-
-CloudWatch logs can be used to troubleshoot:
-
-- Container startup failures
-- Database connection errors
-- Configuration errors
-- Application crashes
-- Runtime errors
-
-## Monitoring
-
-The infrastructure can be monitored using AWS CloudWatch and ECS metrics.
-
-Important operational checks include:
-
-- ECS running task count
 - ECS CPU utilization
 - ECS memory utilization
-- ALB target health
-- ALB HTTP errors
+- ALB unhealthy targets
+- ALB target 5xx errors
 - RDS CPU utilization
-- RDS storage utilization
-- Application logs
+- RDS free storage
 
-Additional monitoring and alarms can be added later.
+Alarm state changes are delivered by email through Amazon SNS.
 
-## Health Checks
+An AWS monthly budget is configured for cost monitoring.
 
-The Application Load Balancer checks whether the Vikunja container is healthy.
+## Backup & Recovery
 
-The Target Group health check uses:
-
-```text
-Protocol: HTTP
-Port: 3456
-Path: /
-```
-
-A healthy deployment should show:
-
-```text
-Target status: healthy
-```
-
-## Backup
-
-Amazon RDS provides automated database backups.
-
-The current lab configuration keeps automated backups for:
-
-```text
-1 day
-```
-
-The retention period is limited by the current AWS account plan.
-
-Manual RDS snapshots can also be created.
-
-## Backup Test
-
-A backup test should be performed using the following process:
-
-1. Create test data inside Vikunja
-2. Create a manual RDS snapshot
-3. Wait until the snapshot becomes available
-4. Record the snapshot identifier
-5. Modify or delete application data
-6. Restore a new RDS instance from the snapshot
-7. Verify that the previous data can be recovered
-
-Detailed steps are documented in:
-
-```text
-docs/backup-restore.md
-```
-
-## Recovery Test
-
-The project should also verify ECS recovery behavior.
+A complete RDS snapshot restore was tested successfully.
 
 Test procedure:
 
-1. Open the ECS service
-2. Identify the running task
-3. Stop the task
-4. Wait for ECS to create a replacement
-5. Verify that the new task reaches `RUNNING`
-6. Verify that the ALB reports the new target as healthy
-7. Verify that existing Vikunja data is still available
+1. Created test data in Vikunja
+2. Created a manual RDS snapshot
+3. Deleted the test data
+4. Restored a temporary RDS instance from the snapshot
+5. Connected Vikunja to the restored database
+6. Verified that the deleted data was recovered
+7. Switched back to the live database
+8. Deleted the temporary restore resources
 
-Expected result:
+## Failure & Persistence Testing
+
+ECS recovery was tested by manually stopping the running task.
+
+ECS automatically created a replacement task and the application recovered successfully.
+
+S3 persistence was also tested:
+
+- Uploaded an attachment to Vikunja
+- Verified the object in S3
+- Stopped the running ECS task
+- Waited for ECS replacement
+- Verified that the attachment was still available
+
+## Terraform
+
+Terraform manages the AWS infrastructure.
+
+```bash
+cd terraform
+
+terraform init
+terraform fmt
+terraform validate
+terraform plan
+terraform apply
+```
+
+Terraform state is stored remotely in an encrypted and versioned S3 backend with state locking.
+
+## Terraform CI
+
+GitHub Actions validates the Terraform configuration automatically.
+
+The workflow runs:
 
 ```text
-Task stopped
-   |
-   v
-ECS detects missing task
-   |
-   v
-New Fargate task starts
-   |
-   v
-Application reconnects to RDS
-   |
-   v
-Existing data remains available
+terraform fmt -check -recursive
+terraform init -backend=false
+terraform validate
 ```
+
+Infrastructure deployment remains manual.
 
 ## Project Structure
 
 ```text
 .
-├── docs
+├── .github/
+│   └── workflows/
+│       └── terraform.yml
+│
+├── docs/
 │   ├── architecture.md
 │   ├── backup-restore.md
 │   ├── deployment.md
 │   ├── monitoring.md
 │   └── troubleshooting.md
 │
-├── terraform
+├── terraform/
 │   ├── alb.tf
+│   ├── budget.tf
 │   ├── ecs.tf
 │   ├── iam.tf
 │   ├── monitoring.tf
@@ -521,312 +198,38 @@ Existing data remains available
 │   ├── outputs.tf
 │   ├── provider.tf
 │   ├── rds.tf
+│   ├── s3.tf
 │   ├── secrets.tf
 │   ├── security.tf
+│   ├── sns.tf
 │   └── variables.tf
 │
-├── .gitignore
 └── README.md
 ```
 
-## Technologies
-
-| Technology | Purpose |
-|---|---|
-| AWS ECS | Container orchestration |
-| AWS Fargate | Serverless container compute |
-| Application Load Balancer | Public application entry point |
-| Amazon RDS | Managed PostgreSQL database |
-| AWS Secrets Manager | Secure secret storage |
-| Amazon CloudWatch | Logging and monitoring |
-| AWS IAM | Permissions and access control |
-| AWS VPC | Network isolation |
-| NAT Gateway | Outbound internet access for private workloads |
-| Terraform | Infrastructure as Code |
-| Vikunja | Open-source application |
-
-## Terraform
-
-The complete AWS infrastructure is managed using Terraform.
-
-Terraform defines:
-
-- VPC
-- Subnets
-- Route Tables
-- Internet Gateway
-- NAT Gateway
-- Security Groups
-- Application Load Balancer
-- Target Group
-- ALB Listener
-- ECS Cluster
-- ECS Task Definition
-- ECS Service
-- RDS PostgreSQL
-- IAM Roles
-- IAM Policies
-- Secrets Manager
-- CloudWatch Logs
-
-## Terraform Initialization
-
-Navigate to the Terraform directory:
-
-```bash
-cd terraform
-```
-
-Initialize Terraform:
-
-```bash
-terraform init
-```
-
-## Terraform Validation
-
-Format the Terraform files:
-
-```bash
-terraform fmt
-```
-
-Validate the configuration:
-
-```bash
-terraform validate
-```
-
-Preview infrastructure changes:
-
-```bash
-terraform plan
-```
-
-These commands can also be executed together:
-
-```bash
-terraform fmt && terraform validate && terraform plan
-```
-
-## Sensitive Variables
-
-Sensitive variables are passed through environment variables.
-
-Database password:
-
-```bash
-export TF_VAR_db_password='<database-password>'
-```
-
-Vikunja service secret:
-
-```bash
-export TF_VAR_vikunja_service_secret='<service-secret>'
-```
-
-These values are not committed to Git.
-
-## Deploy Infrastructure
-
-Deploy the environment:
-
-```bash
-terraform apply
-```
-
-Terraform displays the planned changes.
-
-Confirm with:
-
-```text
-yes
-```
-
-Terraform then creates the AWS infrastructure.
-
-## Terraform Outputs
-
-After a successful deployment:
-
-```bash
-terraform output
-```
-
-Available outputs include:
-
-```text
-alb_dns_name
-ecs_cluster_name
-rds_endpoint
-vpc_id
-```
-
-Retrieve only the Application Load Balancer DNS name:
-
-```bash
-terraform output alb_dns_name
-```
-
-The application can then be opened using:
-
-```text
-http://<alb-dns-name>
-```
-
-## Deployment Validation
-
-After deployment, verify:
-
-- Terraform completed successfully
-- RDS status is available
-- ECS task status is RUNNING
-- ECS desired count equals running count
-- ALB Target Group shows healthy
-- Vikunja opens through the ALB DNS name
-- CloudWatch contains application logs
-- Vikunja can connect to PostgreSQL
-- Application data persists after an ECS task replacement
-
-## Troubleshooting
-
-A useful troubleshooting flow is:
-
-```text
-Application unavailable
-        |
-        v
-Check ALB target health
-        |
-        v
-Check ECS service
-        |
-        v
-Check ECS task status
-        |
-        v
-Check CloudWatch logs
-        |
-        v
-Check Security Groups
-        |
-        v
-Check database connectivity
-        |
-        v
-Check RDS status
-```
-
-Detailed troubleshooting notes are stored in:
-
-```text
-docs/troubleshooting.md
-```
-
-## Useful Terraform Commands
-
-Format Terraform:
-
-```bash
-terraform fmt
-```
-
-Validate Terraform:
-
-```bash
-terraform validate
-```
-
-Create an execution plan:
-
-```bash
-terraform plan
-```
-
-Deploy:
-
-```bash
-terraform apply
-```
-
-Show outputs:
-
-```bash
-terraform output
-```
-
-List Terraform-managed resources:
-
-```bash
-terraform state list
-```
-
-Destroy the infrastructure:
-
-```bash
-terraform destroy
-```
-
-## Cost Management
-
-Several resources generate AWS costs while running.
-
-Important cost-generating resources include:
-
-- ECS Fargate
-- Application Load Balancer
-- NAT Gateway
-- Amazon RDS
-- AWS Secrets Manager
-- CloudWatch
-
-The environment should be destroyed after testing when it is no longer required.
-
-```bash
-terraform destroy
-```
-
-This removes the Terraform-managed infrastructure and prevents unnecessary ongoing costs.
-
-## Planned Improvements
-
-Possible future improvements include:
-
-- HTTPS using AWS Certificate Manager
-- Custom domain using Route 53
-- Fixed Vikunja container version instead of `latest`
-- CloudWatch alarms
-- Automated Terraform CI pipeline
-- Terraform remote state
-- S3 backend with state locking
-- Multi-AZ database deployment
+## Validated
+
+- Terraform deployment
+- Infrastructure teardown and rebuild
+- ECS automatic task recovery
+- RDS persistence
+- S3 attachment persistence
+- RDS snapshot restore
+- CloudWatch monitoring
+- SNS email alerting
+- AWS cost monitoring
+- Terraform CI
+- Remote Terraform state
+
+## Possible Improvements
+
+- HTTPS with AWS Certificate Manager
+- Route 53 custom domain
+- ECS Auto Scaling
+- Multi-AZ RDS
 - Higher backup retention
-- More advanced disaster recovery testing
+- Separate dev/staging/prod environments
 
 ## Status
 
-Infrastructure deployment and validation in progress.
-
-Current implementation includes:
-
-- Terraform infrastructure
-- VPC networking
-- Public and private subnets
-- NAT Gateway
-- Application Load Balancer
-- ECS Fargate
-- RDS PostgreSQL
-- Secrets Manager
-- IAM
-- CloudWatch logging
-- RDS backups
-
-Remaining validation includes:
-
-- Application availability
-- ALB health check
-- Database connectivity
-- Data persistence
-- ECS task replacement
-- Backup and restore testing
-- Monitoring validation
+Infrastructure implementation and operational validation completed.
