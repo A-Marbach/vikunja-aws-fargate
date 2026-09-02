@@ -21,7 +21,7 @@ resource "aws_ecs_task_definition" "vikunja" {
   container_definitions = jsonencode([
     {
       name      = "vikunja"
-      image     = "vikunja/vikunja:latest"
+      image     = "vikunja/vikunja@sha256:417ada6f94e81f0267aa2f007d0a811fc82d38dd2aa58351e3ea520ca01c2ea5"
       essential = true
 
       portMappings = [
