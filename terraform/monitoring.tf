@@ -20,6 +20,9 @@ resource "aws_cloudwatch_metric_alarm" "ecs_cpu_high" {
   threshold           = 80
   treat_missing_data  = "notBreaching"
 
+  alarm_actions = [aws_sns_topic.alerts.arn]
+  ok_actions    = [aws_sns_topic.alerts.arn]
+
   dimensions = {
     ClusterName = aws_ecs_cluster.main.name
     ServiceName = aws_ecs_service.vikunja.name
@@ -41,6 +44,9 @@ resource "aws_cloudwatch_metric_alarm" "ecs_memory_high" {
   statistic           = "Average"
   threshold           = 80
   treat_missing_data  = "notBreaching"
+
+  alarm_actions = [aws_sns_topic.alerts.arn]
+  ok_actions    = [aws_sns_topic.alerts.arn]
 
   dimensions = {
     ClusterName = aws_ecs_cluster.main.name
@@ -64,6 +70,9 @@ resource "aws_cloudwatch_metric_alarm" "alb_unhealthy_hosts" {
   threshold           = 0
   treat_missing_data  = "notBreaching"
 
+  alarm_actions = [aws_sns_topic.alerts.arn]
+  ok_actions    = [aws_sns_topic.alerts.arn]
+
   dimensions = {
     LoadBalancer = aws_lb.main.arn_suffix
     TargetGroup  = aws_lb_target_group.vikunja.arn_suffix
@@ -85,6 +94,9 @@ resource "aws_cloudwatch_metric_alarm" "alb_target_5xx" {
   statistic           = "Sum"
   threshold           = 5
   treat_missing_data  = "notBreaching"
+
+  alarm_actions = [aws_sns_topic.alerts.arn]
+  ok_actions    = [aws_sns_topic.alerts.arn]
 
   dimensions = {
     LoadBalancer = aws_lb.main.arn_suffix
@@ -108,6 +120,9 @@ resource "aws_cloudwatch_metric_alarm" "rds_cpu_high" {
   threshold           = 80
   treat_missing_data  = "notBreaching"
 
+  alarm_actions = [aws_sns_topic.alerts.arn]
+  ok_actions    = [aws_sns_topic.alerts.arn]
+
   dimensions = {
     DBInstanceIdentifier = aws_db_instance.main.identifier
   }
@@ -128,6 +143,9 @@ resource "aws_cloudwatch_metric_alarm" "rds_free_storage_low" {
   statistic           = "Average"
   threshold           = 5368709120
   treat_missing_data  = "notBreaching"
+
+  alarm_actions = [aws_sns_topic.alerts.arn]
+  ok_actions    = [aws_sns_topic.alerts.arn]
 
   dimensions = {
     DBInstanceIdentifier = aws_db_instance.main.identifier

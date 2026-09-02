@@ -34,3 +34,9 @@ variable "vikunja_service_secret" {
   type        = string
   sensitive   = true
 }
+
+
+variable "alert_email" {
+  description = "Email address for CloudWatch alarm notifications"
+  type        = string
+}
