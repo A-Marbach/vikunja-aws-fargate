@@ -1,8 +1,8 @@
 # Vikunja on AWS ECS Fargate
 
-Production-oriented AWS infrastructure project for running **Vikunja on Amazon ECS Fargate**, fully provisioned with **Terraform**.
+AWS infrastructure for running Vikunja on Amazon ECS Fargate, provisioned with Terraform.
 
-The project demonstrates a containerized AWS architecture with private networking, persistent storage, secrets management, monitoring, backup and recovery, failure testing, and Infrastructure as Code.
+This project demonstrates cloud infrastructure operations, private networking, persistent storage, secrets management, monitoring, backup and recovery, failure testing and Infrastructure as Code.
 
 ## Table of Contents
 
@@ -16,8 +16,10 @@ The project demonstrates a containerized AWS architecture with private networkin
 * [Failure Testing](#failure-testing)
 * [Terraform](#terraform)
 * [CI Pipeline](#ci-pipeline)
+* [Project Structure](#project-structure)
 * [Validation](#validation)
-* [Possible Improvements](#possible-improvements)
+* [Skills Demonstrated](#skills-demonstrated)
+* [Status](#status)
 
 ## Architecture
 
@@ -38,45 +40,29 @@ flowchart TD
     end
 ```
 
-```text
-Internet
-   |
-   v
-Application Load Balancer :80
-   |
-   v
-ECS Fargate :3456
-   |
-   +--> RDS PostgreSQL :5432
-   |
-   +--> Amazon S3
-```
-
 The Application Load Balancer is the public entry point.
 
 ECS Fargate tasks and RDS PostgreSQL run in private subnets and are not directly exposed to the internet.
 
 ## Tech Stack
 
-* Amazon ECS Fargate
-* Application Load Balancer
-* Amazon RDS PostgreSQL
-* Amazon S3
-* AWS VPC
-* Public & private subnets
-* NAT Gateway
-* Security Groups
-* IAM
-* AWS Secrets Manager
-* CloudWatch Logs & Alarms
-* Amazon SNS
-* AWS Budgets
-* Terraform
-* GitHub Actions
+| Category               | Technology                                     |
+|------------------------|------------------------------------------------|
+| Compute                | Amazon ECS Fargate                             |
+| Load Balancing         | Application Load Balancer                      |
+| Database               | Amazon RDS PostgreSQL                          |
+| Storage                | Amazon S3                                      |
+| Networking             | AWS VPC, public & private subnets, NAT Gateway |
+| Security               | Security Groups, IAM, AWS Secrets Manager      |
+| Monitoring             | CloudWatch Logs, CloudWatch Alarms             |
+| Notifications          | Amazon SNS                                     |
+| Cost Monitoring        | AWS Budgets                                    |
+| Infrastructure as Code | Terraform                                      |
+| CI                     | GitHub Actions                                 |
 
 ## Infrastructure & Networking
 
-The infrastructure separates public access from private application resources.
+The AWS network architecture separates public ingress from private application and database resources.
 
 ### Public Layer
 
@@ -94,7 +80,7 @@ ECS tasks use the NAT Gateway for outbound internet access without requiring pub
 
 ## Security
 
-Security is enforced through network isolation, Security Groups, IAM and AWS Secrets Manager.
+Security measures are implemented through network isolation, Security Groups, IAM permissions and AWS Secrets Manager.
 
 * ECS tasks have no public IP addresses
 * RDS is not publicly accessible
@@ -109,18 +95,18 @@ The container image is pinned to a specific SHA256 digest instead of using `late
 
 ## Persistence
 
-Persistent application data is stored outside the ECS container.
+Persistent application data is stored outside the ECS task lifecycle.
 
 | Data             | AWS Service    |
 | ---------------- | -------------- |
 | Application data | RDS PostgreSQL |
 | File attachments | Amazon S3      |
 
-This allows ECS tasks to be replaced without losing application data or uploaded files.
+This allows ECS tasks to be stopped, replaced or recreated without losing database data or uploaded files.
 
 ## Monitoring & Alerting
 
-CloudWatch collects application logs and monitors infrastructure health.
+AWS CloudWatch is used for application logs, infrastructure metrics and operational alerting.
 
 Configured alarms include:
 
@@ -139,7 +125,7 @@ More details: [docs/monitoring.md](docs/monitoring.md)
 
 ## Backup & Recovery
 
-Database recovery was tested using an RDS snapshot.
+Database backup and recovery were validated using an RDS snapshot restore test.
 
 Test scenario:
 
@@ -150,7 +136,7 @@ Test scenario:
 5. Connected Vikunja to the restored database
 6. Verified that the deleted data was recovered
 
-The test confirmed that the database could be successfully restored from backup.
+The recovery test confirmed that application data could be successfully restored from an RDS snapshot.
 
 More details: [docs/backup-restore.md](docs/backup-restore.md)
 
@@ -160,7 +146,7 @@ More details: [docs/backup-restore.md](docs/backup-restore.md)
 
 The running ECS task was manually stopped to simulate a container failure.
 
-ECS automatically started a replacement task and restored the application service.
+ECS automatically started a replacement task and restored application availability.
 
 ### S3 Persistence
 
@@ -168,11 +154,11 @@ An attachment was uploaded to Vikunja and verified in Amazon S3.
 
 After stopping and replacing the ECS task, the attachment remained available.
 
-This confirmed that persistent files were independent of the ECS container lifecycle.
+This confirmed that uploaded files remained persistent across ECS task replacement.
 
 ## Terraform
 
-Terraform manages the AWS infrastructure.
+Terraform defines and manages the AWS infrastructure used by the application environment.
 
 ```bash
 cd terraform
@@ -194,7 +180,7 @@ Terraform state is stored remotely in an encrypted and versioned S3 backend with
 
 ## CI Pipeline
 
-GitHub Actions automatically validates the Terraform configuration on repository changes.
+GitHub Actions performs automated Terraform formatting and configuration validation on repository changes.
 
 ```text
 Push / Pull Request
@@ -223,16 +209,16 @@ Workflow:
 .
 ├── .github/
 │   └── workflows/
-│       └── terraform.yml
+│       └── terraform.yml       # Terraform CI validation
 │
-├── docs/
+├── docs/                       # Architecture, deployment and operations documentation
 │   ├── architecture.md
 │   ├── backup-restore.md
 │   ├── deployment.md
 │   ├── monitoring.md
 │   └── troubleshooting.md
 │
-├── terraform/
+├── terraform/                  # AWS infrastructure definitions
 │   ├── alb.tf
 │   ├── budget.tf
 │   ├── ecs.tf
@@ -253,7 +239,7 @@ Workflow:
 
 ## Validation
 
-The following components and operational scenarios were deployed and tested:
+The following infrastructure components and operational scenarios were deployed, tested and verified:
 
 * Terraform deployment
 * Infrastructure teardown and rebuild
@@ -267,17 +253,25 @@ The following components and operational scenarios were deployed and tested:
 * Terraform CI validation
 * Remote Terraform state
 
-## Possible Improvements
 
-* HTTPS with AWS Certificate Manager
-* Route 53 custom domain
-* ECS Auto Scaling
-* Multi-AZ RDS
-* Higher backup retention
-* Separate dev, staging and production environments
+## Skills Demonstrated
+
+* AWS Infrastructure Operations
+* Amazon ECS Fargate
+* AWS VPC Networking
+* Terraform
+* IAM and Security Groups
+* AWS Secrets Manager
+* Amazon RDS PostgreSQL
+* Amazon S3
+* CloudWatch Monitoring and Alerting
+* Backup and Recovery
+* Failure Testing and Service Recovery
+* GitHub Actions
+* Remote Terraform State
 
 ## Status
 
-Infrastructure implementation and operational validation completed.
+Infrastructure deployment, testing and operational validation completed.
 
 The AWS resources were destroyed after testing to avoid unnecessary ongoing costs.
